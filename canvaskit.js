@@ -9292,45 +9292,7 @@ export const CanvasKitInit = (function () {
       }
 
       function getBinaryPromise() {
-        // If we don't have the binary yet, try to to load it asynchronously.
-        // Fetch has some additional restrictions over XHR, like it can't be used on a file:// url.
-        // See https://github.com/github/fetch/pull/92#issuecomment-140665932
-        // Cordova or Electron apps are typically loaded from a file:// url.
-        // So use fetch if it is available and the url is not a file, otherwise fall back to XHR.
-        if (!wasmBinary && (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER)) {
-          if (
-            typeof fetch === "function" &&
-            !isFileURI(wasmBinaryFile)
-          ) {
-            return fetch(wasmBinaryFile, { credentials: "same-origin" }).then(
-              function (response) {
-                if (!response["ok"]) {
-                  throw "failed to load wasm binary file at '" +
-                    wasmBinaryFile + "'";
-                }
-                return response["arrayBuffer"]();
-              },
-            ).catch(function () {
-              return getBinary(wasmBinaryFile);
-            });
-          } else {
-            if (readAsync) {
-              // fetch is not available or url is file => try XHR (readAsync uses XHR internally)
-              return new Promise(function (resolve, reject) {
-                readAsync(wasmBinaryFile, function (response) {
-                  resolve(
-                    new Uint8Array(/** @type{!ArrayBuffer} */ (response)),
-                  );
-                }, reject);
-              });
-            }
-          }
-        }
-
-        // Otherwise, getBinary should be able to get it synchronously
-        return Promise.resolve().then(function () {
-          return getBinary(wasmBinaryFile);
-        });
+        return Deno.readFile(wasmBinaryFile);
       }
 
       // Create the wasm instance.
@@ -9406,33 +9368,7 @@ export const CanvasKitInit = (function () {
         }
 
         function instantiateAsync() {
-          if (
-            !wasmBinary &&
-            typeof WebAssembly.instantiateStreaming === "function" &&
-            !isDataURI(wasmBinaryFile) &&
-            // Don't use streaming for file:// delivered objects in a webview, fetch them synchronously.
-            !isFileURI(wasmBinaryFile) &&
-            typeof fetch === "function"
-          ) {
-            return fetch(wasmBinaryFile, { credentials: "same-origin" }).then(
-              function (response) {
-                var result = WebAssembly.instantiateStreaming(response, info);
-
-                return result.then(
-                  receiveInstantiationResult,
-                  function (reason) {
-                    // We expect the most common failure cause to be a bad MIME type for the binary,
-                    // in which case falling back to ArrayBuffer instantiation should work.
-                    err("wasm streaming compile failed: " + reason);
-                    err("falling back to ArrayBuffer instantiation");
-                    return instantiateArrayBuffer(receiveInstantiationResult);
-                  },
-                );
-              },
-            );
-          } else {
-            return instantiateArrayBuffer(receiveInstantiationResult);
-          }
+          return instantiateArrayBuffer(receiveInstantiationResult);
         }
 
         // User shell pages can write their own Module.instantiateWasm = function(imports, successCallback) callback
